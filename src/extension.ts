@@ -18,11 +18,9 @@ class ComponentProvider implements vscode.TreeDataProvider<Component> {
     if (this.workspaceRoot) {
       const componentsPath = path.join(this.workspaceRoot, 'src', 'components', 'ui');
       if (fs.existsSync(componentsPath)) {
-        this.components = this.getVueFilesRecursively(componentsPath).map(file => {
-          return path.relative(componentsPath, file); // Utiliser le chemin relatif à 'components'
-        });
-        console.log("Composants trouvés : ", this.components); // Ajout d'un log pour vérifier les composants
-        this._onDidChangeTreeData.fire(undefined); // Passer undefined pour indiquer un changement
+        this.components = this.getVueFilesRecursively(componentsPath); // Gardez le chemin complet
+        console.log("Composants trouvés : ", this.components);
+        this._onDidChangeTreeData.fire(undefined);
       } else {
         console.log("Le chemin src/components n'existe pas.");
       }
@@ -50,11 +48,10 @@ class ComponentProvider implements vscode.TreeDataProvider<Component> {
   }
 
   getChildren(): Component[] {
-    // Afficher uniquement les noms de composants sans l'extension .vue
     return this.components.map(component => {
       const componentName = path.basename(component); // Garder le nom complet avec l'extension
       const componentNameWithoutExtension = path.basename(component, '.vue'); // Retirer l'extension .vue
-      return new Component(componentNameWithoutExtension, componentName); // Passer le nom sans extension
+      return new Component(componentNameWithoutExtension, component); // Passer le chemin complet
     });
   }
 
@@ -64,12 +61,12 @@ class ComponentProvider implements vscode.TreeDataProvider<Component> {
 }
 
 class Component extends vscode.TreeItem {
-  constructor(public readonly label: string, public readonly fullName: string) {
+  constructor(public readonly label: string, public readonly fullPath: string) {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.command = {
       command: 'extension.importComponent',
       title: 'Import Component',
-      arguments: [this.fullName] // Passer le nom complet avec l'extension
+      arguments: [this.fullPath] // Passer le chemin complet
     };
   }
 }
@@ -83,36 +80,45 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('extension.importComponent', async (componentName: string) => {
+    vscode.commands.registerCommand('extension.importComponent', async (componentFullPath: string) => {
       const editor = vscode.window.activeTextEditor;
       if (editor) {
         const document = editor.document;
         const editBuilder = new vscode.WorkspaceEdit();
 
-        // Trouver le chemin complet du fichier à partir du nom
-        const fullPath = path.join(workspaceRoot, 'src', 'components', 'ui', componentName);
-
-
-  
-
-        // Utiliser le chemin de base pour l'importation
-        const importPos = document.positionAt(document.getText().indexOf('<script lang="ts">') + '<script lang="ts">'.length);
-
-        // Récupérer le nom sans l'extension pour l'importation
-        const componentNameWithoutExtension = path.basename(componentName, '.vue');
-        const importStatement = `\nimport ${componentNameWithoutExtension} from '@/components/${componentName}';\n`; // Pas besoin de '.vue' ici
-        editBuilder.insert(document.uri, importPos, importStatement); // Ajouter l'URI du document ici
-
+        // Utilisation du chemin complet pour l'importation
+        const componentNameWithoutExtension = path.basename(componentFullPath, '.vue');
+        const newPath = componentFullPath.replace(/.*\/components/, '@/components');
+        // Récupérer le texte actuel du document
+        const documentText = document.getText();
+        
+        // Vérification si l'import existe déjà
+        const importExists = documentText.includes(`import ${componentNameWithoutExtension} from '${newPath}'`);
+        
+        if (!importExists) {
+          // Ajouter la ligne d'importation si elle n'existe pas déjà
+          const importPos = document.positionAt(documentText.indexOf('<script lang="ts">') + '<script lang="ts">'.length);
+          const importStatement = `\nimport ${componentNameWithoutExtension} from '${newPath}';\n`;
+          editBuilder.insert(document.uri, importPos, importStatement);
+        }
+        
+        // Vérifier si le composant est déjà dans l'objet components
+        const componentsIndex = documentText.indexOf('components: {');
+        if (componentsIndex !== -1) {
+          const componentsSectionText = documentText.substring(componentsIndex, documentText.indexOf('}', componentsIndex));
+        
+          if (!componentsSectionText.includes(`${componentNameWithoutExtension}`)) {
+            // Ajouter le composant dans l'objet components s'il n'y est pas déjà
+            const componentsPos = document.positionAt(componentsIndex + 14); // 14 pour sauter "components: {"
+            editBuilder.insert(document.uri, componentsPos, `\n\t${componentNameWithoutExtension},`);
+          }
+        }
+        
         // Récupérer la position du curseur pour insérer le composant dans le template
         const position = editor.selection.active;
-        editBuilder.insert(document.uri,position, `<${path.basename(componentName, '.vue')} />`);
-
-        const componentsIndex = document.getText().indexOf('components: {');
-        if (componentsIndex !== -1) {
-          const componentsPos = document.positionAt(componentsIndex + 12); // 12 pour sauter "components: {"
-          editBuilder.insert(document.uri, componentsPos, `\n\t${componentNameWithoutExtension},`); // Ajouter une tabulation avant le nom du composant
-        }
-
+        editBuilder.insert(document.uri, position, `<${componentNameWithoutExtension} />`);
+        
+        // Appliquer les modifications
         await vscode.workspace.applyEdit(editBuilder);
         await document.save();
       }
@@ -121,3 +127,4 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {}
+
