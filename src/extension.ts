@@ -16,7 +16,7 @@ class ComponentProvider implements vscode.TreeDataProvider<Component> {
 
   refresh() {
     if (this.workspaceRoot) {
-      const componentsPath = path.join(this.workspaceRoot, 'src', 'components');
+      const componentsPath = path.join(this.workspaceRoot, 'src', 'components', 'ui');
       if (fs.existsSync(componentsPath)) {
         this.components = this.getVueFilesRecursively(componentsPath).map(file => {
           return path.relative(componentsPath, file); // Utiliser le chemin relatif à 'components'
@@ -90,7 +90,10 @@ export function activate(context: vscode.ExtensionContext) {
         const editBuilder = new vscode.WorkspaceEdit();
 
         // Trouver le chemin complet du fichier à partir du nom
-        const fullPath = path.join(workspaceRoot, 'src', 'components', componentName);
+        const fullPath = path.join(workspaceRoot, 'src', 'components', 'ui', componentName);
+
+
+  
 
         // Utiliser le chemin de base pour l'importation
         const importPos = document.positionAt(document.getText().indexOf('<script lang="ts">') + '<script lang="ts">'.length);
@@ -99,6 +102,10 @@ export function activate(context: vscode.ExtensionContext) {
         const componentNameWithoutExtension = path.basename(componentName, '.vue');
         const importStatement = `\nimport ${componentNameWithoutExtension} from '@/components/${componentName}';\n`; // Pas besoin de '.vue' ici
         editBuilder.insert(document.uri, importPos, importStatement); // Ajouter l'URI du document ici
+
+        // Récupérer la position du curseur pour insérer le composant dans le template
+        const position = editor.selection.active;
+        editBuilder.insert(document.uri,position, `<${path.basename(componentName, '.vue')} />`);
 
         const componentsIndex = document.getText().indexOf('components: {');
         if (componentsIndex !== -1) {
