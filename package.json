@@ -12,6 +12,20 @@
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "extension.showSearchBox",
+        "title": "Afficher le champ de recherche de composants"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "extension.showSearchBox",
+        "key": "ctrl+alt+a",
+        "mac": "ctrl+alt+a",
+        "when": "view == componentList"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
